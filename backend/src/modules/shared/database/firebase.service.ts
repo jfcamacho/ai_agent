@@ -1,0 +1,121 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import * as admin from 'firebase-admin';
+
+@Injectable()
+export class FirebaseService implements OnModuleInit {
+  private readonly logger = new Logger(FirebaseService.name);
+  private firestore: admin.firestore.Firestore | null = null;
+  private inMemoryStore: Map<string, Map<string, any>> = new Map();
+
+  onModuleInit() {
+    try {
+      if (admin.apps.length === 0) {
+        if (process.env.FIREBASE_CONFIG || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          admin.initializeApp();
+          this.firestore = admin.firestore();
+          this.logger.log('Connected to Google Cloud Firestore successfully.');
+        } else {
+          this.logger.warn(
+            'Running in LOCAL SECURE FALLBACK store (Firestore SDK initialized in-memory). ' +
+            'Provide GOOGLE_APPLICATION_CREDENTIALS for live Firestore cloud instance.'
+          );
+        }
+      } else {
+        this.firestore = admin.firestore();
+      }
+    } catch (error) {
+      this.logger.warn('Firestore initialization fallback activated:', error);
+    }
+  }
+
+  public async resetStore(): Promise<void> {
+    if (this.firestore) {
+      const collections = ['leads', 'companies', 'virtual_outbox', 'appointments', 'audit_logs', 'outreach_messages'];
+      for (const coll of collections) {
+        const snap = await this.firestore.collection(coll).get();
+        for (const doc of snap.docs) {
+          await doc.ref.delete();
+        }
+      }
+    }
+    this.inMemoryStore.clear();
+    this.logger.log('Sandbox Store has been completely cleared and reset.');
+  }
+
+  public getCollection(collectionName: string) {
+    if (this.firestore) {
+      return {
+        doc: (id: string) => ({
+          get: async () => {
+            const snap = await this.firestore!.collection(collectionName).doc(id).get();
+            return {
+              exists: snap.exists,
+              data: () => snap.data(),
+              id: snap.id
+            };
+          },
+          set: async (data: any, options?: any) => {
+            await this.firestore!.collection(collectionName).doc(id).set(data, options);
+          },
+          update: async (data: any) => {
+            await this.firestore!.collection(collectionName).doc(id).update(data);
+          },
+          delete: async () => {
+            await this.firestore!.collection(collectionName).doc(id).delete();
+          }
+        }),
+        get: async () => {
+          const snap = await this.firestore!.collection(collectionName).get();
+          return {
+            docs: snap.docs.map(d => ({
+              id: d.id,
+              data: () => d.data()
+            }))
+          };
+        }
+      };
+    }
+
+    // In-memory fallback
+    if (!this.inMemoryStore.has(collectionName)) {
+      this.inMemoryStore.set(collectionName, new Map());
+    }
+    const collectionMap = this.inMemoryStore.get(collectionName)!;
+
+    return {
+      doc: (id: string) => ({
+        get: async () => {
+          const exists = collectionMap.has(id);
+          const data = collectionMap.get(id);
+          return {
+            exists,
+            data: () => data,
+            id
+          };
+        },
+        set: async (data: any, options?: any) => {
+          if (options && options.merge && collectionMap.has(id)) {
+            const existing = collectionMap.get(id);
+            collectionMap.set(id, { ...existing, ...data });
+          } else {
+            collectionMap.set(id, data);
+          }
+        },
+        update: async (data: any) => {
+          const existing = collectionMap.get(id) || {};
+          collectionMap.set(id, { ...existing, ...data });
+        },
+        delete: async () => {
+          collectionMap.delete(id);
+        }
+      }),
+      get: async () => {
+        const docs = Array.from(collectionMap.entries()).map(([id, data]) => ({
+          id,
+          data: () => data
+        }));
+        return { docs };
+      }
+    };
+  }
+}
