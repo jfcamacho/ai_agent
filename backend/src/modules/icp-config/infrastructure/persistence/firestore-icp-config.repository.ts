@@ -58,7 +58,8 @@ export class FirestoreIcpConfigRepository implements IIcpConfigRepositoryPort {
 
   async save(config: IcpConfig): Promise<IcpConfig> {
     const col = this.firebaseService.getCollection(this.collectionName);
-    await col.doc(this.defaultDocId).set({ ...config }, { merge: true });
+    const sanitized = JSON.parse(JSON.stringify(config));
+    await col.doc(this.defaultDocId).set(sanitized);
     return config;
   }
 }
