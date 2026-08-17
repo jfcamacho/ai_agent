@@ -10,36 +10,46 @@ export class FirebaseService implements OnModuleInit {
   onModuleInit() {
     try {
       if (admin.apps.length === 0) {
-        if (process.env.FIREBASE_CONFIG || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-          admin.initializeApp();
+        const projectId = process.env.GCP_PROJECT_ID || 'gen-lang-client-0311520356';
+        
+        // Auto-connect to real Firestore on Cloud Run or when credentials are provided
+        if (process.env.K_SERVICE || process.env.NODE_ENV === 'production' || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          admin.initializeApp({
+            projectId
+          });
           this.firestore = admin.firestore();
-          this.logger.log('Connected to Google Cloud Firestore successfully.');
+          this.logger.log(`[FIRESTORE LIVE] ✅ Conectado exitosamente a Google Cloud Firestore nativo (Proyecto: ${projectId}).`);
         } else {
           this.logger.warn(
-            'Running in LOCAL SECURE FALLBACK store (Firestore SDK initialized in-memory). ' +
-            'Provide GOOGLE_APPLICATION_CREDENTIALS for live Firestore cloud instance.'
+            '[FIRESTORE LOCAL] Ejecutando con almacén seguro en memoria para desarrollo local. ' +
+            'En Cloud Run se conecta automáticamente a Google Cloud Firestore.'
           );
         }
       } else {
         this.firestore = admin.firestore();
+        this.logger.log('[FIRESTORE LIVE] ✅ Usando instancia activa de Firestore.');
       }
     } catch (error) {
-      this.logger.warn('Firestore initialization fallback activated:', error);
+      this.logger.warn('[FIRESTORE FALLBACK] Activado almacén en memoria por advertencia:', error);
     }
   }
 
   public async resetStore(): Promise<void> {
     if (this.firestore) {
-      const collections = ['leads', 'companies', 'virtual_outbox', 'appointments', 'audit_logs', 'outreach_messages'];
+      const collections = ['leads', 'companies', 'virtual_outbox', 'appointments', 'audit_logs', 'outreach_messages', 'icp_config'];
       for (const coll of collections) {
-        const snap = await this.firestore.collection(coll).get();
-        for (const doc of snap.docs) {
-          await doc.ref.delete();
+        try {
+          const snap = await this.firestore.collection(coll).get();
+          for (const doc of snap.docs) {
+            await doc.ref.delete();
+          }
+        } catch (e) {
+          this.logger.warn(`Error limpiando coleccion Firestore ${coll}:`, e);
         }
       }
     }
     this.inMemoryStore.clear();
-    this.logger.log('Sandbox Store has been completely cleared and reset.');
+    this.logger.log('[FIRESTORE RESET] Base de datos restablecida correctamente.');
   }
 
   public getCollection(collectionName: string) {
@@ -55,10 +65,13 @@ export class FirebaseService implements OnModuleInit {
             };
           },
           set: async (data: any, options?: any) => {
-            await this.firestore!.collection(collectionName).doc(id).set(data, options);
+            // Strip undefined values which Firestore rejects
+            const sanitized = JSON.parse(JSON.stringify(data));
+            await this.firestore!.collection(collectionName).doc(id).set(sanitized, options);
           },
           update: async (data: any) => {
-            await this.firestore!.collection(collectionName).doc(id).update(data);
+            const sanitized = JSON.parse(JSON.stringify(data));
+            await this.firestore!.collection(collectionName).doc(id).update(sanitized);
           },
           delete: async () => {
             await this.firestore!.collection(collectionName).doc(id).delete();
@@ -76,7 +89,7 @@ export class FirebaseService implements OnModuleInit {
       };
     }
 
-    // In-memory fallback
+    // In-memory fallback for local dev
     if (!this.inMemoryStore.has(collectionName)) {
       this.inMemoryStore.set(collectionName, new Map());
     }
