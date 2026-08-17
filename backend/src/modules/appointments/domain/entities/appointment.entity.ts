@@ -19,6 +19,7 @@ export class Appointment {
   meetingTime: string;
   durationMinutes: number;
   meetingLink: string;
+  googleCalendarUrl?: string;
   agendaSummary: string;
   crmSyncStatus: 'SYNCED_VIRTUAL_CRM' | 'PENDING';
   status: AppointmentStatus;

@@ -11,7 +11,7 @@ export interface VirtualOutboxRecord {
   subject: string;
   renderedHtmlBody: string;
   deliveredAt: string;
-  status: 'DELIVERED_VIRTUAL_SANDBOX' | 'OPENED_SIMULATED';
+  status: 'DELIVERED_VIRTUAL_SANDBOX' | 'DELIVERED_LIVE_EMAIL' | 'OPENED_SIMULATED';
 }
 
 export interface IVirtualOutboxPort {

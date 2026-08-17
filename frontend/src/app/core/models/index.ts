@@ -131,6 +131,7 @@ export interface Appointment {
   meetingTime: string;
   durationMinutes: number;
   meetingLink: string;
+  googleCalendarUrl?: string;
   agendaSummary: string;
   crmSyncStatus: string;
   status: 'SCHEDULED' | 'CONFIRMED' | 'COMPLETED' | 'RESCHEDULED' | 'CANCELLED';
