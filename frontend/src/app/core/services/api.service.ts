@@ -18,7 +18,7 @@ import {
   providedIn: 'root',
 })
 export class ApiService {
-  private readonly baseUrl = 'http://localhost:8080/api/v1';
+  private readonly baseUrl = (window as any).__ENV_API_URL__ || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:8080/api/v1' : 'https://intermx-hunting-backend-550761856984.us-central1.run.app/api/v1');
 
   constructor(private readonly http: HttpClient) {}
 

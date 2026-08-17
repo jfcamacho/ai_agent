@@ -2,10 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY package*.json tsconfig*.json nest-cli.json ./
+RUN npm install
 
-COPY . .
+COPY src ./src
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -16,7 +16,7 @@ ENV NODE_ENV=production
 ENV PORT=8080
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
